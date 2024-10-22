@@ -1,0 +1,220 @@
+enum UserStatus {
+    INVITED
+    VERIFIED
+}
+
+model User {
+    id                String             @id @default(uuid())
+    name              String?
+    email             String?            @unique
+    pictureUrl        String?            @default('https://i.imgur.com/ZdJSK3Y.jpeg')
+    tokenInvitation   String?
+
+    stripeCustomerId  String?
+
+    status            UserStatus         @default(VERIFIED)
+
+    // this is the role of the user for the application
+    globalRole        String             @default('USER')
+    password          String?            @password @omit
+    createdAt         DateTime           @default(now())
+    updatedAt         DateTime           @updatedAt @default(now())
+
+    organizationRoles OrganizationRole[]
+
+    enrollments       Enrollment[]       @relation("user")
+    reviews           Review[]           @relation("user")
+    achievements      Achievement[]      @relation("user")
+    subscriptions     Subscription[]     @relation("user")
+
+    @@auth()
+    @@allow("all", auth().id == this.id)
+    @@allow('all', auth().globalRole == 'ADMIN')
+
+    //we only allow that user to register if they don't create an admin role
+    @@allow("create", globalRole != 'ADMIN')
+    @@allow("read", true)
+}
+
+model LearningPlatform {
+
+    id          String   @id @default(uuid())
+    name        String
+    description String?
+    websiteUrl  String?
+
+    courses     Course[] @relation("learningPlatform")
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Course {
+
+    id                 String              @id @default(uuid())
+    title              String
+    description        String?
+    duration           Float?
+    difficultyLevel    String?
+
+    organizationId     String
+    organization       Organization?       @relation(fields: [organizationId], references: [id], name: "organization")
+    learningPlatformId String
+    learningPlatform   LearningPlatform    @relation(fields: [learningPlatformId], references: [id], name: "learningPlatform")
+
+    instructorId       String?
+    instructor         Instructor?         @relation(fields: [instructorId], references: [id], name: "instructor")
+    curriculum         CurriculumItem[]    @relation("curriculum")
+
+    enrollments        Enrollment[]        @relation("course")
+    reviews            Review[]            @relation("course")
+    achievements       Achievement[]       @relation("course")
+    aiGeneratedCourses AiGeneratedCourse[] @relation("course")
+    createdAt          DateTime            @default(now())
+    updatedAt          DateTime            @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Instructor {
+    id        String   @id @default(uuid())
+    name      String
+    bio       String?
+    courses   Course[] @relation("instructor")
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model CurriculumItem {
+    id          String   @id @default(uuid())
+    title       String
+    description String?
+    courseId    String
+    course      Course   @relation(fields: [courseId], references: [id], name: "curriculum")
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Enrollment {
+
+    id                 String   @id @default(uuid())
+    enrollmentDate     String
+    completionStatus   String?
+    progressPercentage String?
+
+    userId             String
+    user               User?    @relation(fields: [userId], references: [id], name: "user")
+    courseId           String
+    course             Course?  @relation(fields: [courseId], references: [id], name: "course")
+
+    createdAt          DateTime @default(now())
+    updatedAt          DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Review {
+
+    id        String   @id @default(uuid())
+    rating    Float?
+    comment   String?
+
+    userId    String
+    user      User?    @relation(fields: [userId], references: [id], name: "user")
+    courseId  String
+    course    Course?  @relation(fields: [courseId], references: [id], name: "course")
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Achievement {
+
+    id          String   @id @default(uuid())
+    name        String
+    description String?
+    earnedAt    String
+    badgeUrl    String?
+
+    userId      String
+    user        User?    @relation(fields: [userId], references: [id], name: "user")
+    courseId    String
+    course      Course?  @relation(fields: [courseId], references: [id], name: "course")
+
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Subscription {
+
+    id               String        @id @default(uuid())
+    startDate        String
+    endDate          String?
+    status           String?
+    subscriptionType String?
+
+    userId           String
+    user             User?         @relation(fields: [userId], references: [id], name: "user")
+    organizationId   String
+    organization     Organization? @relation(fields: [organizationId], references: [id], name: "organization")
+
+    createdAt        DateTime      @default(now())
+    updatedAt        DateTime      @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model AiGeneratedCourse {
+
+    id                 String   @id @default(uuid())
+    aiModel            String?
+    generationDate     String
+    prompt             String?
+    additionalMetadata String?
+
+    courseId           String
+    course             Course?  @relation(fields: [courseId], references: [id], name: "course")
+
+    createdAt          DateTime @default(now())
+    updatedAt          DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Organization {
+    id               String             @id @default(uuid())
+    name             String
+    pictureUrl       String?            @default('https://i.imgur.com/BgkFiid.jpeg')
+
+    stripeCustomerId String?
+
+    createdAt        DateTime           @default(now())
+    updatedAt        DateTime           @updatedAt @default(now())
+    roles            OrganizationRole[]
+
+    courses          Course[]           @relation("organization")
+    subscriptions    Subscription[]     @relation("organization")
+
+    @@allow('all', auth().globalRole == 'ADMIN')
+    @@allow('all', roles?[user == auth() && name == 'owner'])
+    @@allow('read', roles?[user == auth()])
+}
+
+model OrganizationRole {
+    id             String       @id @default(uuid())
+    name           String
+    createdAt      DateTime     @default(now())
+    updatedAt      DateTime     @updatedAt @default(now())
+
+    userId         String       @default(auth().id)
+    user           User         @relation(fields: [userId], references: [id])
+    organizationId String
+    organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+    @@allow('all', auth().globalRole == 'ADMIN')
+    @@allow('all', organization.roles?[user == auth() && name == 'owner'])
+    @@allow('create', organization.roles?[user == auth()] && name != 'owner')
+    @@allow('read', organization.roles?[user == auth()])
+    @@allow('delete', auth() == user)
+}
+
